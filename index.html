@@ -139,9 +139,20 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ency-card .ec-row .k{color:var(--pri2);font-weight:600;flex:0 0 56px}
 .ency-card .ec-row .v{color:var(--sub)}
 .foot{text-align:center;padding:40px 0;color:var(--dim);font-size:12px;line-height:1.8}
+
+/* gear + AI */
+.gear-btn{position:fixed;top:14px;right:14px;z-index:50;width:42px;height:42px;border-radius:50%;background:var(--card2);border:1px solid var(--line);color:var(--sub);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+.gear-btn:active{transform:scale(.92)}
+.ai-sec{border:1px solid var(--pri);background:linear-gradient(160deg,rgba(139,108,240,.12),var(--card))}
+.ai-badge{font-size:11px;font-weight:600;color:var(--pri2);background:rgba(139,108,240,.18);padding:3px 9px;border-radius:6px;margin-left:6px}
+.ai-out{margin-top:16px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:18px;font-size:15px;line-height:1.85;color:var(--txt);white-space:pre-wrap;word-break:break-word;min-height:60px}
+.ai-out:empty:before{content:'';display:block}
+.ai-cursor{display:inline-block;width:8px;height:16px;background:var(--pri2);vertical-align:text-bottom;animation:blink 1s steps(2) infinite}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
 </style>
 </head>
 <body>
+<button class="gear-btn" onclick="openSettings()" title="AI 设置">⚙️</button>
 <div class="wrap">
 
 <!-- ============ HOME ============ -->
@@ -245,6 +256,16 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
     </div>
   </div>
 
+  <!-- AI 专属报告 (unlock 后显示) -->
+  <div id="aiBlock" style="display:none">
+    <div class="sec ai-sec">
+      <h3>🤖 AI 专属深度报告 <span class="ai-badge">DeepSeek 实时生成</span></h3>
+      <p style="color:var(--sub);font-size:14px;margin-bottom:14px">普通报告是按类型预设的;AI 会结合你<b>每个维度的真实作答倾向</b>,为你一个人量身撰写,千人千面。</p>
+      <button class="btn btn-pri" id="aiBtn" style="width:100%" onclick="genAI()">✨ 生成我的 AI 专属报告</button>
+      <div class="ai-out" id="aiOut" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- full report (revealed after unlock) -->
   <div id="fullReport" style="display:none"></div>
 
@@ -266,6 +287,23 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 </div>
 
 </div><!-- /wrap -->
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-mask" id="settingsModal">
+  <div class="modal" style="text-align:left">
+    <h3 style="text-align:center">⚙️ AI 设置</h3>
+    <div class="msub" style="text-align:center">填入你的 DeepSeek API Key,即可生成 AI 专属报告</div>
+    <label style="font-size:13px;color:var(--sub);display:block;margin-bottom:6px">DeepSeek API Key</label>
+    <input id="keyInput" type="password" placeholder="sk-..." autocomplete="off"
+      style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;color:var(--txt);font-size:15px;font-family:inherit;margin-bottom:12px">
+    <div style="background:var(--bg2);border-radius:12px;padding:14px;font-size:12.5px;color:var(--dim);line-height:1.7;margin-bottom:18px">
+      🔒 <b style="color:var(--sub)">密钥只存在你这台设备的浏览器里</b>,不会上传、不会进入代码、不会被任何人看到。<br>
+      🔑 没有 Key?去 <b style="color:var(--pri2)">platform.deepseek.com</b> 注册 → 创建 API Key → 充值几元即可(生成一份报告约几分钱)。
+    </div>
+    <button class="btn btn-pri" style="width:100%" onclick="saveKey()">保存</button>
+    <button class="modal-close" style="width:100%;margin-top:10px" onclick="closeSettings()">取消</button>
+  </div>
+</div>
 
 <!-- ============ PAY MODAL ============ -->
 <div class="modal-mask" id="payModal">
@@ -609,7 +647,7 @@ const ENCY = [
 ];
 
 /* ===== STATE ===== */
-let cur=0, answers=[], unlocked=false, myType='';
+let cur=0, answers=[], unlocked=false, myType='', lastScore=null;
 
 /* ===== NAV ===== */
 function showScreen(id){
@@ -627,7 +665,15 @@ function renderHome(){
 
 /* ===== QUIZ ===== */
 const DIMNAME={EI:'外向 / 内向',SN:'实感 / 直觉',TF:'思考 / 情感',JP:'判断 / 感知'};
-function startQuiz(){ cur=0; answers=new Array(QUESTIONS.length).fill(null); unlocked=false; showScreen('quiz'); renderQ(); }
+function startQuiz(){
+  cur=0; answers=new Array(QUESTIONS.length).fill(null); unlocked=false;
+  document.getElementById('paywall').style.display='';
+  document.getElementById('aiBlock').style.display='none';
+  document.getElementById('fullReport').style.display='none';
+  const ao=document.getElementById('aiOut'); ao.style.display='none'; ao.innerHTML='';
+  const ab=document.getElementById('aiBtn'); ab.disabled=false; ab.textContent='✨ 生成我的 AI 专属报告';
+  showScreen('quiz'); renderQ();
+}
 function renderQ(){
   const q=QUESTIONS[cur];
   document.getElementById('qbar').style.width=((cur)/QUESTIONS.length*100)+'%';
@@ -659,7 +705,7 @@ function finish(){
     score[pole]++;
   });
   const t=(score.E>=score.I?'E':'I')+(score.S>=score.N?'S':'N')+(score.T>=score.F?'T':'F')+(score.J>=score.P?'J':'P');
-  myType=t;
+  myType=t; lastScore=score;
   renderResult(t,score);
   showScreen('result');
 }
@@ -709,9 +755,75 @@ function closePay(){ document.getElementById('payModal').classList.remove('show'
 function confirmPay(){
   unlocked=true; closePay();
   document.getElementById('paywall').style.display='none';
+  document.getElementById('aiBlock').style.display='block';
   document.getElementById('fullReport').style.display='block';
-  document.getElementById('fullReport').scrollIntoView({behavior:'smooth'});
+  document.getElementById('aiBlock').scrollIntoView({behavior:'smooth'});
 }
+
+/* ===== SETTINGS (DeepSeek key, 本地存储) ===== */
+function getKey(){ return (localStorage.getItem('ds_api_key')||'').trim(); }
+function openSettings(){ document.getElementById('keyInput').value=getKey(); document.getElementById('settingsModal').classList.add('show'); }
+function closeSettings(){ document.getElementById('settingsModal').classList.remove('show'); }
+function saveKey(){
+  const v=document.getElementById('keyInput').value.trim();
+  if(v) localStorage.setItem('ds_api_key',v); else localStorage.removeItem('ds_api_key');
+  closeSettings();
+  if(v) alert('✅ 已保存到本地。现在可以生成 AI 专属报告了!'); else alert('已清除本地密钥。');
+}
+
+/* ===== AI 专属报告 (DeepSeek 流式) ===== */
+async function genAI(){
+  const key=getKey();
+  if(!key){ alert('请先填入 DeepSeek API Key(点右上角 ⚙️ 或这里设置)'); openSettings(); return; }
+  if(!lastScore){ alert('请先完成测试'); return; }
+  const d=TYPES[myType], s=lastScore;
+  const btn=document.getElementById('aiBtn'), out=document.getElementById('aiOut');
+  const sys='你是一位资深的性格分析师和生涯咨询师,擅长用通俗、温暖又精准的语言解读 MBTI 性格,给人启发和力量。';
+  const prompt=`我刚做完一套 93 题的 MBTI 性格测试,结果类型是 ${myType}(${d.nick})。
+四个维度的真实作答票数(两边数字越接近,说明我在这个维度越平衡/灵活;差距越大说明该倾向越突出):
+· 外向 E ${s.E} 票  vs  内向 I ${s.I} 票
+· 实感 S ${s.S} 票  vs  直觉 N ${s.N} 票
+· 思考 T ${s.T} 票  vs  情感 F ${s.F} 票
+· 判断 J ${s.J} 票  vs  感知 P ${s.P} 票
+
+请作为温暖而专业的性格分析师,用中文为我写一份个性化深度报告(约 900-1200 字),要求:
+1. 必须结合上面的具体票数差异来分析——某维度两边接近就指出我在这方面比较平衡/能两头切换,不要说得太绝对;差距大就说这个特质很鲜明。
+2. 分为这几个部分,每部分用一个带 emoji 的小标题独立成行:🧬 性格内核、💪 你的独特优势、🌫️ 容易踩的坑、💞 关系与相处、💼 职业与发展、🌱 送你一句话。
+3. 语气真诚、具体、有画面感,像一个很懂我的朋友在跟我聊,不要套话和"正确的废话"。
+4. 直接输出正文,不要"好的""以下是"之类的开场白。`;
+
+  btn.disabled=true; btn.textContent='🤖 AI 正在为你撰写…';
+  out.style.display='block'; out.innerHTML='<span class="ai-cursor"></span>';
+  let text='';
+  try{
+    const resp=await fetch('https://api.deepseek.com/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'deepseek-chat',stream:true,temperature:0.85,
+        messages:[{role:'system',content:sys},{role:'user',content:prompt}]})
+    });
+    if(!resp.ok){ const e=await resp.text().catch(()=>''); throw new Error('接口返回 '+resp.status+(e?(' — '+e.slice(0,200)):'')); }
+    const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n'); buf=lines.pop();
+      for(const line of lines){
+        const t=line.trim(); if(!t.startsWith('data:')) continue;
+        const data=t.slice(5).trim(); if(data==='[DONE]') continue;
+        try{ const j=JSON.parse(data); const piece=j.choices?.[0]?.delta?.content; if(piece){ text+=piece; out.innerHTML=esc(text)+'<span class="ai-cursor"></span>'; } }catch(_){}
+      }
+    }
+    out.innerHTML=esc(text);
+    btn.textContent='✨ 重新生成';
+  }catch(err){
+    out.innerHTML=esc('❌ 生成失败:'+err.message+'\n\n排查一下:\n1) API Key 是否填对(点右上角 ⚙️)\n2) DeepSeek 账户是否有余额\n3) 网络是否正常');
+    btn.textContent='✨ 重试';
+  }finally{
+    btn.disabled=false;
+  }
+}
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function restart(){ if(confirm('重新开始测试?')) startQuiz(); }
 function shareResult(){
   const d=TYPES[myType];
